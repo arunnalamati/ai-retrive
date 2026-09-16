@@ -1,0 +1,47 @@
+AI and Retrieval-Augmented Generation
+
+Retrieval-Augmented Generation (RAG) combines information retrieval with text generation. Instead of relying only on a language model's internal knowledge, RAG retrieves relevant information from an external knowledge base and provides it as context.
+
+A typical RAG pipeline includes:
+
+1. Document Ingestion
+Documents such as PDF, DOCX, TXT, and CSV files are uploaded.
+
+2. Text Extraction
+The system extracts readable text from uploaded documents.
+
+3. Text Cleaning
+Unnecessary spaces and irrelevant formatting are removed.
+
+4. Chunking
+Large documents are divided into smaller pieces called chunks.
+
+5. Embeddings
+Each chunk is converted into a numerical vector representing its semantic meaning.
+
+6. Vector Database
+Embeddings and metadata are stored in a vector database such as ChromaDB.
+
+7. Semantic Search
+The user query is converted into an embedding and compared with document embeddings to retrieve semantically relevant chunks.
+
+8. Response Generation
+Retrieved chunks are provided to a language model to generate a grounded response.
+
+Multi-agent RAG systems can divide responsibilities among agents.
+
+The Query Understanding Agent identifies the type and intent of a user query.
+
+The Retrieval Agent searches the knowledge base and ranks relevant chunks.
+
+The Response Generation Agent creates a grounded response using retrieved information.
+
+The Clarification Agent handles unclear or ambiguous queries.
+
+The Conversation Memory Agent maintains relevant information from previous interactions.
+
+A sequential multi-agent workflow is:
+
+User Query → Query Understanding Agent → Retrieval Agent → Response Generation Agent → Final Response
+
+RAG can reduce hallucinations by providing relevant information from a controlled knowledge source. However, answer quality depends on document quality, chunking, embeddings, and retrieval accuracy.
