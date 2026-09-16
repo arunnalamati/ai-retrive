@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # AI Knowledge Retrieval and Multi-Agent RAG System
 
 An academic, full-stack multi-agent Retrieval-Augmented Generation (RAG) system implementing **Milestone 1** (Document Ingestion, Cleaning, Chunking, Vector Embeddings, Persistent ChromaDB) and **Milestone 2** (Query Understanding Agent, Retrieval Agent, Response Generation Agent, Clarification Agent, Confidence Estimation, Source Attribution, Web Speech Voice Input, and Modern React Dashboard).
@@ -285,3 +286,6 @@ python -m pytest -v
 - **Milestone 1**: Complete document ingestion, chunking, embeddings, ChromaDB, vector search.
 - **Milestone 2**: Multi-agent pipeline (Query Understanding, Retrieval, Response Generation, Clarification, Memory), grounded synthesis, confidence scoring, source attribution, Web Speech voice input, modern dashboard.
 - **Milestone 3 (Future Scope)**: Multi-turn iterative clarification workflows, hybrid BM25 + dense retrieval, re-ranking cross-encoders, and agentic self-reflection.
+=======
+# ai-retrive
+>>>>>>> 79aca356f7fc85f06d2c77118cd1fc15613cb8e1
