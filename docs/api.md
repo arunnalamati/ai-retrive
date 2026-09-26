@@ -58,51 +58,84 @@ Content-Type: `multipart/form-data`
 
 ---
 
-## 4. Execute RAG Query
+## 4. Execute RAG Query (Updated for Milestone 3)
 `POST /query`  
 Content-Type: `application/json`
 
 ### Request Body
 ```json
 {
-  "query": "What is RAG?",
-  "top_k": 3
+  "query": "How long can I keep it?",
+  "top_k": 3,
+  "conversation_id": "optional-uuid-string",
+  "user_clarification": "optional clarification text"
 }
 ```
 
 ### Response (200 OK)
 ```json
 {
-  "query": "What is RAG?",
+  "conversation_id": "8f9024a1-b42e-48a0-9c29-3732fa1d7c48",
+  "query": "How long can I keep it?",
   "query_type": "factual",
   "classification_confidence": 0.92,
   "route": "retrieval",
+  "clarification_required": false,
+  "clarification": {
+    "clarification_required": false,
+    "original_query": "How long can I keep it?",
+    "clarification_question": "Are you asking about the borrowing period for library books?",
+    "user_clarification": "library books",
+    "refined_query": "How long can a student keep a borrowed library book?"
+  },
+  "refined_query": "How long can a student keep a borrowed library book?",
   "retrieval": {
     "top_k": 3,
     "results": [
       {
-        "document_name": "AI_RAG_Guide.txt",
+        "document_name": "College_Library_Policy.txt",
         "chunk_id": "chunk_001",
-        "content": "Retrieval-Augmented Generation (RAG) combines information retrieval with text generation...",
-        "relevance_score": 0.912,
-        "page_number": null,
-        "section": "Main Document"
+        "content": "Each student can borrow up to 4 books at a time. Books are issued for a period of 14 days.",
+        "relevance_score": 0.884,
+        "page_number": 1,
+        "section": "Book Borrowing"
       }
     ],
     "no_sufficient_information": false
   },
-  "response": "Retrieval-Augmented Generation (RAG) combines information retrieval with text generation.",
+  "response": "Each student can borrow up to 4 books at a time. Books are issued for a period of 14 days.",
   "confidence": "High",
   "sources": [
     {
-      "document_name": "AI_RAG_Guide.txt",
+      "document_name": "College_Library_Policy.txt",
       "chunk_id": "chunk_001",
-      "relevance_score": 0.912,
-      "page_number": null,
-      "section": "Main Document"
+      "relevance_score": 0.884,
+      "page_number": 1,
+      "section": "Book Borrowing"
     }
   ],
+  "transparency": {
+    "supporting_chunks": [
+      {
+        "document_name": "College_Library_Policy.txt",
+        "chunk_id": "chunk_001",
+        "content": "Each student can borrow up to 4 books at a time. Books are issued for a period of 14 days.",
+        "relevance_score": 0.884,
+        "page_number": 1,
+        "section": "Book Borrowing"
+      }
+    ],
+    "has_sufficient_evidence": true,
+    "confidence_rationale": "Determined by vector similarity distance of top retrieved evidence chunks."
+  },
+  "active_topic": "College Library Policy",
   "pipeline_trace": [
+    {
+      "agent_name": "Conversation Memory Agent",
+      "status": "completed",
+      "details": "Session 8f9024a1... Active topic: 'College Library Policy'",
+      "duration_ms": 0.6
+    },
     {
       "agent_name": "Query Understanding Agent",
       "status": "completed",
@@ -127,7 +160,17 @@ Content-Type: `application/json`
 
 ---
 
-## 5. System Stats
+## 5. Conversation Memory Management (Milestone 3.2)
+
+### `GET /conversations/{conversation_id}`
+Retrieves session turns, active topic, and referenced documents.
+
+### `DELETE /conversations/{conversation_id}`
+Clears short-term conversational context for the given session.
+
+---
+
+## 6. System Stats
 `GET /stats`
 
 ### Response (200 OK)

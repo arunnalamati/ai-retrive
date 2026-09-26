@@ -18,12 +18,15 @@ export default function App() {
   const [documents, setDocuments] = useState([]);
   const [stats, setStats] = useState({ total_documents: 0, total_chunks: 0, status: 'connecting' });
   
-  // Query State
+  // Query & Conversation State (Milestone 3)
   const [query, setQuery] = useState('');
   const [topK, setTopK] = useState(3);
   const [isLoading, setIsLoading] = useState(false);
   const [queryResponse, setQueryResponse] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
+  const [conversationId, setConversationId] = useState(null);
+  const [conversationHistory, setConversationHistory] = useState([]);
+  const [activeTopic, setActiveTopic] = useState(null);
 
   // Agent Pipeline Real-time animation states
   const [pipelineState, setPipelineState] = useState({
@@ -61,16 +64,15 @@ export default function App() {
     return () => clearInterval(interval);
   }, [refreshData]);
 
-  // Execute Query with Multi-Agent Step Animations
-  const handleQuery = async (customQuery) => {
-    const q = customQuery || query;
-    if (!q.trim() || isLoading) return;
+  // Execute Query with Multi-Agent Step Animations (supports M3 conversation & clarification)
+  const handleQuery = async (customQuery, userClarification = null) => {
+    const q = customQuery !== undefined ? customQuery : query;
+    if ((!q.trim() && !userClarification) || isLoading) return;
 
     setIsLoading(true);
     setErrorMessage('');
-    setQueryResponse(null);
 
-    // Initial pipeline state
+    // Pipeline animation sequence
     setPipelineState({
       query: 'completed',
       understanding: 'processing',
@@ -81,15 +83,21 @@ export default function App() {
     });
 
     try {
-      // Small simulated tick for visual understanding stage
-      await new Promise((r) => setTimeout(r, 250));
+      await new Promise((r) => setTimeout(r, 200));
       setPipelineState((prev) => ({
         ...prev,
         understanding: 'completed',
         retrieval: 'processing'
       }));
 
-      const res = await queryKnowledgeBase(q, topK);
+      const res = await queryKnowledgeBase(q, topK, conversationId, userClarification);
+
+      if (res.conversation_id) {
+        setConversationId(res.conversation_id);
+      }
+      if (res.active_topic) {
+        setActiveTopic(res.active_topic);
+      }
 
       const isAmbiguous = res.route === 'clarification_required';
 
@@ -114,6 +122,15 @@ export default function App() {
       }
 
       setQueryResponse(res);
+      setConversationHistory((prev) => {
+        // If user clarification was submitted, replace or append to history cleanly
+        return [...prev, res];
+      });
+
+      // Clear search box if successful
+      if (!userClarification) {
+        setQuery('');
+      }
     } catch (err) {
       setErrorMessage(err.message || 'Failed to process query');
       setPipelineState({
@@ -127,6 +144,18 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleClarificationSubmit = (clarificationText) => {
+    handleQuery('', clarificationText);
+  };
+
+  const handleResetSession = () => {
+    setConversationId(null);
+    setConversationHistory([]);
+    setActiveTopic(null);
+    setQueryResponse(null);
+    setQuery('');
   };
 
   const handleQuickQuery = (sampleQ) => {
@@ -164,8 +193,10 @@ export default function App() {
                 setQuery={setQuery}
                 topK={topK}
                 setTopK={setTopK}
-                onSearch={() => handleQuery()}
+                onSearch={(customQuery) => handleQuery(customQuery)}
                 isLoading={isLoading}
+                activeTopic={activeTopic}
+                onResetSession={conversationHistory.length > 0 ? handleResetSession : null}
               />
 
               {errorMessage && (
@@ -198,14 +229,17 @@ export default function App() {
                   query_type: queryResponse.query_type,
                   classification_confidence: queryResponse.classification_confidence,
                   route: queryResponse.route,
-                  reasoning: queryResponse.pipeline_trace?.[0]?.details
+                  reasoning: queryResponse.pipeline_trace?.[1]?.details || queryResponse.pipeline_trace?.[0]?.details
                 }} />
               )}
 
-              {/* AI Response Container */}
-              {queryResponse && (
-                <ResponsePanel responseData={queryResponse} />
-              )}
+              {/* AI Conversation & Response Flow */}
+              <ResponsePanel
+                queryResponse={queryResponse}
+                conversationHistory={conversationHistory}
+                onSubmitClarification={handleClarificationSubmit}
+                isLoading={isLoading}
+              />
 
               {/* Retrieved Chunks Results */}
               {queryResponse && queryResponse.route !== 'clarification_required' && (
@@ -248,30 +282,33 @@ export default function App() {
             </div>
           )}
 
-          {/* System Architecture Tab */}
+          {/* Architecture Tab */}
           {activeTab === 'architecture' && (
             <div className="glass-card">
               <h2 style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-heading)', marginBottom: '12px' }}>
-                🏛️ Multi-Agent Architecture (Milestones 1 & 2)
+                🏗️ Multi-Agent Architecture
               </h2>
-              <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+              <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '16px' }}>
                 The architecture decouples monolithic search into specialized autonomous agents:
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ padding: '12px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
-                  <strong>1. Query Understanding Agent:</strong> Classifies queries into <code>factual</code>, <code>procedural</code>, <code>comparative</code>, or <code>ambiguous</code> with confidence metrics.
+                  <strong>1. Conversation Memory Agent (M3.2):</strong> Maintains multi-turn context, resolves coreference ('its' → 'RAG'), and preserves session topic isolation without writing to ChromaDB.
                 </div>
                 <div style={{ padding: '12px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
-                  <strong>2. Retrieval Agent:</strong> Performs 384-d semantic search in ChromaDB, ranks results, and applies relevance thresholds.
+                  <strong>2. Query Understanding Agent:</strong> Classifies queries into <code>factual</code>, <code>procedural</code>, <code>comparative</code>, or <code>ambiguous</code> with confidence metrics.
                 </div>
                 <div style={{ padding: '12px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
-                  <strong>3. Response Generation Agent:</strong> Synthesizes grounded answers strictly from retrieved context with zero hallucination.
+                  <strong>3. Clarification Agent (M3.1):</strong> Detects missing parameters or vague referents, formulating targeted follow-up prompts before retrieval.
                 </div>
                 <div style={{ padding: '12px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
-                  <strong>4. Clarification Agent:</strong> Formulates guided prompts when queries lack clear subject context.
+                  <strong>4. Retrieval Agent:</strong> Performs 384-d semantic search in ChromaDB, supports multi-part subqueries, and applies relevance thresholds.
                 </div>
                 <div style={{ padding: '12px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
-                  <strong>5. Conversation Memory Agent:</strong> Maintains session turn history as an architectural foundation component.
+                  <strong>5. Response Generation Agent:</strong> Synthesizes grounded answers strictly from retrieved context with zero hallucination.
+                </div>
+                <div style={{ padding: '12px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                  <strong>6. Response Transparency Panel (M3.4):</strong> Audits supporting chunks, document provenance, and exact relevance scores.
                 </div>
               </div>
             </div>

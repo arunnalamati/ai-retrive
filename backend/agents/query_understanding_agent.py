@@ -31,16 +31,26 @@ class QueryUnderstandingAgent:
             r"^why\??$",
             r"^how\??$",
             r"^what about that\??$",
-            r"^how so\??$"
+            r"^how so\??$",
+            r"^how long can (?:i|we) keep it\??$",
+            r"^how much can (?:i|we) borrow\??$",
+            r"^how many can (?:i|we) borrow\??$",
+            r"^can (?:i|we) borrow\??$",
+            r"^how much to borrow\??$",
+            r"^how many to borrow\??$",
+            r"^what is the fee\??$",
+            r"^what is the cost\??$",
+            r"^what are its (?:advantages|benefits|steps)\??$",
+            r"^what about that document\??$"
         ]
         for pattern in ambiguous_patterns:
             if re.match(pattern, lower_query):
                 return {
                     "query": cleaned_query,
                     "query_type": "ambiguous",
-                    "classification_confidence": 0.88,
+                    "classification_confidence": 0.90,
                     "route": "clarification_required",
-                    "reasoning": "Query contains vague referents ('it', 'this') without a specific domain noun, requiring clarification."
+                    "reasoning": "Query contains vague referents or missing context without a specific domain noun, requiring clarification."
                 }
 
         # Check if query is <= 4 words and contains vague pronoun without subject noun

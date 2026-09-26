@@ -80,19 +80,23 @@ export async function getSystemStats() {
 }
 
 /**
- * Submit query to the multi-agent RAG system
+ * Submit query to the multi-agent RAG system (supports M3 conversation_id and clarification)
  */
-export async function queryKnowledgeBase(query, topK = 3) {
+export async function queryKnowledgeBase(query, topK = 3, conversationId = null, userClarification = null) {
+  const payload = {
+    query: (query || '').trim(),
+    top_k: Number(topK)
+  };
+  if (conversationId) payload.conversation_id = conversationId;
+  if (userClarification) payload.user_clarification = userClarification.trim();
+
   const res = await fetch(`${API_BASE}/query`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json'
     },
-    body: JSON.stringify({
-      query: query.trim(),
-      top_k: Number(topK)
-    })
+    body: JSON.stringify(payload)
   });
 
   if (!res.ok) {
@@ -104,5 +108,25 @@ export async function queryKnowledgeBase(query, topK = 3) {
     throw new Error(errorMsg);
   }
 
+  return await res.json();
+}
+
+/**
+ * Fetch conversation history and active state
+ */
+export async function getConversation(conversationId) {
+  const res = await fetch(`${API_BASE}/conversations/${conversationId}`);
+  if (!res.ok) throw new Error('Failed to fetch conversation');
+  return await res.json();
+}
+
+/**
+ * Reset conversation session memory
+ */
+export async function clearConversation(conversationId) {
+  const res = await fetch(`${API_BASE}/conversations/${conversationId}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok) throw new Error('Failed to clear conversation');
   return await res.json();
 }

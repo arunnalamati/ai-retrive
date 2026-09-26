@@ -113,8 +113,65 @@ User Query Input (or Web Speech STT)
 
 ---
 
-## 4. Storage Architecture
+## 4. Multi-Agent Conversational Flow (Milestone 3)
+
+```
+User Query Input (Text or Web Speech API Dictation)
+      ↓
+[FastAPI /query]
+      ↓
+[Multi-Agent Orchestrator]
+      ↓
+[Step 1: Conversation Memory Agent]
+      • Checks for active pending clarification response
+      • Resolves anaphoric coreferences ("its" → "RAG pipeline")
+      • Detects context continuation ("renewal" → College Library Policy)
+      • Enforces clean context switching across distinct domains
+      • Formulates resolved query and updates session context
+      ↓
+[Step 2: Clarification Agent - Ambiguity Evaluation]
+      • Checks if query has missing referents or unclear intent
+      ├── If Ambiguous & Unresolved:
+      │     - Sets awaiting_clarification: true
+      │     - Returns targeted follow-up question
+      │     - Halts before vector retrieval to prevent false search
+      └── If Clear or Resolved:
+            Proceeds to Step 3
+      ↓
+[Step 3: Query Understanding Agent]
+      • Classifies resolved query: factual, procedural, comparative, or ambiguous
+      • Computes intent classification confidence score
+      ↓
+[Step 4: Retrieval Agent]
+      • Embeds query using local SentenceTransformer
+      • Decomposes compound multi-part queries if present
+      • Executes dense cosine similarity search in ChromaDB
+      • Filters by relevance threshold (0.35)
+      ↓
+[Step 5: Response Generation Agent]
+      • Grounded extractive synthesis strictly derived from retrieved evidence
+      • Assembles multi-part answers (e.g. 4 books and 2 rupees fine)
+      • Returns strict no-information refusal if evidence is insufficient
+      ↓
+[Step 6: Response Transparency Panel & TTS Assembly]
+      • Records supporting chunks, document name, chunk ID, relevance %, section
+      • Formats confidence rating: High, Medium, or Low
+      • Prepares clean text for Web Speech window.speechSynthesis
+      ↓
+[Step 7: Session Memory Record Turn]
+      • Appends user and assistant messages, active topic, cited documents to session memory
+      • Strict isolation: Never writes ephemeral conversation history to ChromaDB
+```
+
+---
+
+## 5. Storage Architecture & Memory Isolation
 
 - **`data/uploads/`**: Raw uploaded files saved with unique document ID prefixes.
-- **`data/chroma/`**: Persistent ChromaDB parquet and sqlite vector index files.
-- **`data/metadata.db`**: Local SQLite database for rapid document listing, deletion, and system telemetry.
+- **`data/chroma/`**: Persistent ChromaDB parquet and sqlite vector index files. Represents the permanent Knowledge Base.
+- **`data/metadata.db`**: Local SQLite database for document metadata, chunk counts, file paths, upload times, and indexing status.
+- **Conversation Memory Store (`backend/agents/conversation_memory_agent.py`)**:
+  - Maintained in-process with session ID scoping (`conversation_id`).
+  - Stores multi-turn history, active topic, entities, referenced documents, and pending clarification state.
+  - **Strict Architectural Separation**: Conversation memory is completely decoupled from the ChromaDB vector store to prevent conversational noise from polluting the permanent knowledge base.
+

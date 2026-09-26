@@ -1,7 +1,9 @@
-<<<<<<< HEAD
 # AI Knowledge Retrieval and Multi-Agent RAG System
 
-An academic, full-stack multi-agent Retrieval-Augmented Generation (RAG) system implementing **Milestone 1** (Document Ingestion, Cleaning, Chunking, Vector Embeddings, Persistent ChromaDB) and **Milestone 2** (Query Understanding Agent, Retrieval Agent, Response Generation Agent, Clarification Agent, Confidence Estimation, Source Attribution, Web Speech Voice Input, and Modern React Dashboard).
+An academic, full-stack multi-agent Retrieval-Augmented Generation (RAG) system implementing:
+- **Milestone 1**: Document Ingestion (PDF, DOCX, TXT, CSV), Boundary-Aware Chunking, Dense Semantic Embeddings (`all-MiniLM-L6-v2`), and Persistent ChromaDB Vector Store.
+- **Milestone 2**: Query Understanding Agent, Semantic Vector Retrieval Agent, Grounded Response Generation Agent with Zero-Hallucination, Confidence Estimation, and Source Attribution.
+- **Milestone 3**: Clarification Agent (targeted follow-up questions & query refinement), Conversation Memory Agent (multi-turn coreference resolution & topic switching), Web Speech Voice Input & Text-to-Speech Audio Synthesis, and Response Transparency Panel with full chunk provenance.
 
 ---
 
@@ -15,8 +17,9 @@ This project implements a modular, grounded Multi-Agent RAG System that:
 1. Ingests heterogeneous corporate and academic documents (PDF, DOCX, TXT, CSV).
 2. Converts textual chunks into dense semantic vector representations using local Sentence-Transformers.
 3. Indexes chunks inside a persistent vector database (ChromaDB) with metadata.
-4. Leverages specialized agents (Query Understanding, Retrieval, Clarification, Response Generation, Memory) to analyze intent, perform semantic vector retrieval, enforce relevance thresholds, and construct grounded answers with zero hallucination.
+4. Leverages specialized agents (Memory, Query Understanding, Clarification, Retrieval, Response Generation) to maintain session context, resolve ambiguous inquiries before retrieval, perform vector search, enforce relevance thresholds, and construct grounded answers with zero hallucination.
 5. Employs Web Speech API for bi-directional speech recognition and text-to-speech synthesis.
+6. Provides an interactive Response Transparency Panel detailing exact supporting evidence chunks, similarity scores, and document citations.
 
 ---
 
@@ -27,15 +30,14 @@ This project implements a modular, grounded Multi-Agent RAG System that:
 - **Local Dense Embeddings**: `all-MiniLM-L6-v2` generating 384-dimensional unit-normalized embeddings locally with zero external API fees.
 - **Persistent Vector Store**: ChromaDB storage persisted to disk under `data/chroma/`.
 - **Multi-Agent Orchestration**:
+  - **Conversation Memory Agent (M3.2)**: Maintains session context across turns, resolves coreference (*"its"* $\rightarrow$ *"RAG"*), handles context continuation, and ensures topic switching without polluting ChromaDB.
   - **Query Understanding Agent**: Classifies queries into `factual`, `procedural`, `comparative`, or `ambiguous`.
-  - **Retrieval Agent**: Semantic vector search with cosine similarity, Top-K ranking, and threshold filtering.
+  - **Clarification Agent (M3.1)**: Detects ambiguity and missing parameters, asks targeted follow-up questions, and synthesizes refined queries.
+  - **Retrieval Agent**: Semantic vector search with cosine similarity, Top-K ranking, multi-part subqueries, and threshold filtering.
   - **Response Generation Agent**: Grounded synthesis ensuring strict attribution and zero hallucination.
-  - **Clarification Agent**: Resolves ambiguous inquiries with constructive guidance.
-  - **Conversation Memory Agent**: Foundations for session turn tracking.
 - **Strict Anti-Hallucination**: Returns clear no-information state when retrieved evidence is absent.
-- **Retrieval Confidence Scoring**: Quantifies retrieval confidence as `High`, `Medium`, or `Low` based on vector distances.
-- **Verifiable Source Attribution**: Displays document name, chunk ID, relevance percentage, and page/section.
-- **Multi-Modal Voice Interaction**: Web Speech API speech-to-text recognition and text-to-speech synthesis.
+- **Response Transparency Panel (M3.4)**: Displays exact supporting chunks, document metadata, section, and relevance score percentages.
+- **Multi-Modal Voice Interaction (M3.3)**: Web Speech API microphone dictation and Text-to-Speech audio response synthesis with Play, Pause, Resume, and Stop controls.
 - **Modern AI Dashboard**: Dark-mode glassmorphic interface with real-time pipeline status animations.
 
 ---

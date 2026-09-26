@@ -21,20 +21,31 @@ def search_knowledge_base(
     # Generate query embedding
     query_emb = embedding_service.generate_query_embedding(query)
 
-    # Query ChromaDB
-    raw_results = chroma_service.query_chunks(query_emb, top_k=top_k)
+    # Query ChromaDB with sufficient candidate window for deduplication
+    fetch_k = max(top_k * 4, 10)
+    raw_results = chroma_service.query_chunks(query_emb, top_k=fetch_k)
 
     if not raw_results:
         return [], True
 
+    # Deduplicate candidate chunks with identical or near-identical text
+    deduped_raw = []
+    seen_texts = set()
+    for item in raw_results:
+        sig = " ".join(item.get("content", "").split())[:120].lower()
+        if sig not in seen_texts:
+            seen_texts.add(sig)
+            deduped_raw.append(item)
+        if len(deduped_raw) >= top_k:
+            break
+
     # Filter by relevance threshold
     filtered_results = [
-        item for item in raw_results
+        item for item in deduped_raw
         if item.get("relevance_score", 0.0) >= threshold
     ]
 
     if not filtered_results:
-        # Return all raw results but flag no_sufficient_information = True
-        return raw_results, True
+        return deduped_raw[:top_k], True
 
-    return filtered_results, False
+    return filtered_results[:top_k], False

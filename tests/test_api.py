@@ -56,4 +56,4 @@ def test_query_endpoint_ambiguous():
     data = response.json()
     assert data["query_type"] == "ambiguous"
     assert data["route"] == "clarification_required"
-    assert "clarification" in data["response"].lower() or "ambiguous" in data["response"].lower()
+    assert data.get("clarification_required") is True or "clarification" in data["response"].lower() or "ambiguous" in data["response"].lower()

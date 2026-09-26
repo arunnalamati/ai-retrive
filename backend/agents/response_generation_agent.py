@@ -88,23 +88,62 @@ class ResponseGenerationAgent:
             if relevant_sentences:
                 return f"Based on {top_chunk.get('document_name', 'the knowledge base')}:\n\n" + " ".join(relevant_sentences)
 
-        # Handle factual queries
-        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', top_content) if s.strip()]
-        
-        # Rank sentences within the top chunk by keyword relevance to the query
-        keywords = set(re.findall(r'\b[a-zA-Z]{3,}\b', query.lower())) - {"what", "is", "the", "are", "how", "many", "does"}
+        # Handle factual queries and multi-part queries across retrieved chunks
+        all_sentences = []
+        seen_texts = set()
+        for c in chunks:
+            c_text = c.get("content", "").strip()
+            s_list = [s.strip() for s in re.split(r'(?<=[.!?])\s+', c_text) if s.strip()]
+            for s in s_list:
+                if s not in seen_texts:
+                    seen_texts.add(s)
+                    all_sentences.append(s)
+
+        # Multi-part query check
+        conjunction_split = re.split(r'\s+and\s+|\s+as well as\s+|\s*;\s*', query, flags=re.IGNORECASE)
+        if len(conjunction_split) > 1:
+            part_answers = []
+            for part in conjunction_split:
+                part_clean = part.strip()
+                p_keywords = set(re.findall(r'\b[a-zA-Z]{3,}\b', part_clean.lower())) - {"what", "is", "the", "are", "how", "many", "does", "can", "and"}
+                scored = []
+                for s in all_sentences:
+                    s_lower = s.lower()
+                    score = sum(1 for kw in p_keywords if kw in s_lower)
+                    if any(w in part_clean.lower() for w in ["fine", "fee", "cost", "late"]) and any(w in s_lower for w in ["fine", "fee", "rupees", "charged"]):
+                        score += 3
+                    if any(w in part_clean.lower() for w in ["borrow", "how many", "quantity", "books"]) and any(w in s_lower for w in ["borrow", "books", "student"]):
+                        score += 3
+                    scored.append((score, s))
+                scored.sort(key=lambda x: x[0], reverse=True)
+                if scored and scored[0][0] > 0 and scored[0][1] not in part_answers:
+                    part_answers.append(scored[0][1])
+            if part_answers:
+                return " ".join(part_answers)
+
+        # Standard factual scoring across retrieved chunks
+        keywords = set(re.findall(r'\b[a-zA-Z]{3,}\b', query.lower())) - {"what", "is", "the", "are", "how", "does", "can"}
+        is_how_long = "how long" in query.lower() or "period" in query.lower() or "keep" in query.lower()
+        is_how_many = "how many" in query.lower() or "limit" in query.lower() or "number" in query.lower()
+        is_fine_cost = "fine" in query.lower() or "fee" in query.lower() or "cost" in query.lower()
+
         scored_sentences = []
-        for s in sentences:
-            score = sum(1 for kw in keywords if kw in s.lower())
+        for s in all_sentences:
+            s_lower = s.lower()
+            score = sum(1 for kw in keywords if kw in s_lower)
+            if is_how_long and any(w in s_lower for w in ["days", "period", "issued", "keep", "hours", "duration"]):
+                score += 4
+            if is_how_many and any(w in s_lower for w in ["books", "borrow", "up to", "receive", "days"]):
+                score += 2
+            if is_fine_cost and any(w in s_lower for w in ["fine", "rupees", "charged", "fee"]):
+                score += 3
             scored_sentences.append((score, s))
             
         scored_sentences.sort(key=lambda x: x[0], reverse=True)
         top_scored = [s for sc, s in scored_sentences if sc > 0]
 
         if top_scored:
-            # Join up to 3 top matching sentences
-            answer_text = " ".join(top_scored[:3])
-            return answer_text
+            return " ".join(top_scored[:3])
 
         # Fallback to the primary paragraph of the top chunk
         paragraphs = [p.strip() for p in top_content.split("\n\n") if p.strip()]

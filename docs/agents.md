@@ -39,18 +39,47 @@ This document defines the roles, input/output schemas, and coordination protocol
 
 ---
 
-## 4. Clarification Agent
+## 4. Clarification Agent (Milestone 3.1)
 - **File**: `backend/agents/clarification_agent.py`
-- **Purpose**: Guides users when queries are ambiguous, providing constructive suggestions and concrete domain query examples.
+- **Purpose**: Detects ambiguous, incomplete, context-dependent queries and formulates targeted follow-up prompts.
+- **Capabilities**:
+  - **Ambiguity Detection**: Flags pronouns without referents (*"it"*, *"its"*, *"that document"*), underspecified quantities/items (*"How much can I borrow?"*), and vague operations (*"how does it work?"*).
+  - **Targeted Question Formulation**: Asks context-specific follow-ups (e.g. *"Are you asking about the borrowing period for library books?"*, *"What would you like to borrow — library books or something else?"*).
+  - **Multi-Part Query Decomposition**: Splits compound queries (e.g. *"How many books can I borrow and what is the late return fine?"*) to retrieve evidence for each sub-intent.
+  - **Refined Query Synthesis**: Fuses original query and user clarification into a fully qualified inquiry for retrieval (e.g. *"Library book"* $\rightarrow$ *"How long can a student keep a borrowed library book?"*, *"Books."* $\rightarrow$ *"How many books can a student borrow?"*).
+  - **Clarification State Model**:
+    - `conversation_id`: Associated session UUID.
+    - `original_query`: Original input query.
+    - `clarification_required`: Boolean flag.
+    - `clarification_question`: Formulated follow-up prompt.
+    - `missing_context`: Summary of missing parameters.
+    - `awaiting_clarification`: `true` while awaiting response; `false` once clarified.
+    - `clarification_response`: Captured user response.
+    - `refined_query`: Synthesized query sent to retrieval.
 
 ---
 
-## 5. Conversation Memory Agent
+## 5. Conversation Memory Agent (Milestone 3.2)
 - **File**: `backend/agents/conversation_memory_agent.py`
-- **Purpose**: Foundational component that records conversational turns, query classifications, and response confidence for session continuity.
+- **Purpose**: Maintains session-scoped interaction history, resolves coreference, and handles topic continuity.
+- **Capabilities**:
+  - **Coreference Resolution**: Resolves pronouns like *"its"* $\rightarrow$ *"RAG"* using conversation history (*"What are its main steps?"* $\rightarrow$ *"What are the main steps in the RAG pipeline?"*).
+  - **Context Continuation**: Preserves topical domain for elliptical follow-ups (*"What about renewal?"* $\rightarrow$ *"What is the renewal period for borrowed library books?"*).
+  - **Clean Context Switching**: Detects topic shifts (e.g. transitioning from *RAG Architecture* to *College Library Policy*) and prevents blending stale context into new domains.
+  - **Vector Store Isolation**: Memory remains in session storage and is **never** saved as permanent ChromaDB knowledge chunks.
+  - **Memory Context Model (`MemoryContext`)**:
+    - `topic`: Current conversational topic.
+    - `entities`: Recognized key entities across turns (`Library Books`, `Borrowing Policy`, `Late Return Fine`, `RAG Architecture`, etc.).
+    - `referenced_documents`: Files cited during the session.
+    - `relevant_previous_queries`: Recent user questions.
+    - `relevant_previous_answers`: Recent AI responses.
+    - `clarification_context`: Active or resolved clarification state.
 
 ---
 
 ## 6. Multi-Agent Orchestrator
 - **File**: `backend/agents/orchestrator.py`
-- **Purpose**: Directs execution flow between agents, benchmarks execution latency, computes application-level confidence, compiles source attributions, and returns the unified API response.
+- **Purpose**: Directs the end-to-end multi-agent execution pipeline:
+  `Memory Context Resolution` $\rightarrow$ `Clarification Evaluation (if ambiguous)` $\rightarrow$ `Query Understanding` $\rightarrow$ `Retrieval (with subquery support)` $\rightarrow$ `Response Generation` $\rightarrow$ `Transparency Panel Assembly` $\rightarrow$ `Memory Update`.
+
+

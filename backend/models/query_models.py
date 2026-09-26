@@ -5,8 +5,21 @@ QueryType = Literal["factual", "procedural", "comparative", "ambiguous"]
 QueryRoute = Literal["retrieval", "clarification_required"]
 
 class QueryRequest(BaseModel):
-    query: str = Field(..., min_length=1, description="The user question or search prompt")
+    query: Optional[str] = Field(default="", description="The user question or search prompt")
     top_k: int = Field(default=3, ge=1, le=10, description="Number of top chunks to retrieve")
+    conversation_id: Optional[str] = Field(default=None, description="Optional conversation session ID")
+    user_clarification: Optional[str] = Field(default=None, description="User's clarification response if answering a follow-up")
+
+class ClarificationState(BaseModel):
+    conversation_id: Optional[str] = None
+    original_query: str
+    clarification_required: bool = False
+    clarification_question: Optional[str] = None
+    missing_context: Optional[str] = None
+    awaiting_clarification: bool = False
+    clarification_response: Optional[str] = None
+    user_clarification: Optional[str] = None
+    refined_query: Optional[str] = None
 
 class QueryUnderstandingResponse(BaseModel):
     query: str
