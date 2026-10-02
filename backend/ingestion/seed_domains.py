@@ -72,6 +72,14 @@ def seed_domain_documents(force: bool = False):
         indexed.append({"document_name": doc_name, "chunks": len(chunks), "document_id": document_id})
         logger.info(f"Indexed domain document '{doc_name}' ({len(chunks)} chunks).")
 
+        # Explicitly release references and free memory
+        del chunk_texts
+        del embeddings
+        del chunks
+        del raw_items
+        import gc
+        gc.collect()
+
     return indexed
 
 if __name__ == "__main__":

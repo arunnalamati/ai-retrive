@@ -1,12 +1,14 @@
 import os
 from pathlib import Path
 
-# Prevent thread deadlock on Windows with PyTorch / HuggingFace
+# Prevent thread deadlock and restrict memory footprint for PyTorch / HuggingFace
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["MALLOC_ARENA_MAX"] = "2"
+os.environ["TORCH_CPU_ONLY"] = "1"
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 

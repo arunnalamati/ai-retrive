@@ -4,10 +4,12 @@
 # ==============================================================================
 FROM python:3.11-slim
 
-# Prevent Python from writing .pyc files and enable unbuffered output
+# Prevent Python from writing .pyc files, tune glibc malloc arenas, and enable unbuffered output
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=8000 \
+    MALLOC_ARENA_MAX=2 \
+    TORCH_CPU_ONLY=1 \
     OPENBLAS_NUM_THREADS=1 \
     OMP_NUM_THREADS=1 \
     MKL_NUM_THREADS=1 \
@@ -25,13 +27,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy dependency specifications first for caching
 COPY requirements.txt .
 
-# Install Python dependencies (using PyTorch CPU wheels to minimize image size)
+# Install Python dependencies: explicitly install PyTorch CPU-only wheel first
+# to avoid pulling multi-gigabyte CUDA wheels that blow past the 512MB RAM limit
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt
 
-# Pre-download and cache the sentence-transformers model during build
-# This eliminates cold-start delays and timeout issues on cloud deploy
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+# Pre-download and cache the sentence-transformers model during build on CPU
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2', device='cpu')"
 
 # Copy application source code and seed data
 COPY backend/ ./backend/

@@ -5,7 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.config import settings
 from backend.database.database import init_db
 from backend.database.analytics_db import init_analytics_db
-from backend.ingestion.seed_domains import seed_domain_documents
 from backend.api.upload import router as upload_router
 from backend.api.documents import router as documents_router
 from backend.api.query import router as query_router
@@ -18,6 +17,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger("backend.main")
 
+async def _background_seed_worker():
+    """
+    Seeds initial domain documents in background after port binds,
+    preventing high memory spikes during container startup and health checks.
+    """
+    import asyncio
+    import gc
+    await asyncio.sleep(2)
+    logger.info("Running background initialization for domain documents...")
+    try:
+        from backend.ingestion.seed_domains import seed_domain_documents
+        await asyncio.to_thread(seed_domain_documents)
+        gc.collect()
+        logger.info("Background domain documents initialization complete.")
+    except Exception as e:
+        logger.warning(f"Domain documents auto-seeding deferred: {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup tasks
@@ -25,10 +41,11 @@ async def lifespan(app: FastAPI):
     init_db()
     init_analytics_db()
     logger.info("Databases initialized successfully.")
-    try:
-        seed_domain_documents()
-    except Exception as e:
-        logger.warning(f"Domain documents auto-seeding deferred: {e}")
+
+    # Start background seeding without blocking port binding or memory cap
+    import asyncio
+    asyncio.create_task(_background_seed_worker())
+
     yield
     # Shutdown tasks
     logger.info("Application shutting down...")
