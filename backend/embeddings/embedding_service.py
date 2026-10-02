@@ -35,8 +35,11 @@ class EmbeddingService:
         """Generate normalized vector embeddings for a list of texts."""
         if not texts:
             return []
+        cleaned_texts = [str(t).strip() for t in texts if t is not None and str(t).strip()]
+        if not cleaned_texts:
+            return []
         embeddings = self._model.encode(
-            texts,
+            cleaned_texts,
             show_progress_bar=False,
             convert_to_numpy=True,
             normalize_embeddings=True
@@ -45,8 +48,10 @@ class EmbeddingService:
 
     def generate_query_embedding(self, query: str) -> List[float]:
         """Generate a normalized vector embedding for a single search query."""
+        if query is None or not isinstance(query, str) or not query.strip():
+            raise ValueError("Query passed to generate_query_embedding must be a valid non-empty string.")
         embedding = self._model.encode(
-            query,
+            query.strip(),
             show_progress_bar=False,
             convert_to_numpy=True,
             normalize_embeddings=True

@@ -15,11 +15,15 @@ def search_knowledge_base(
     if threshold is None:
         threshold = settings.RETRIEVAL_THRESHOLD
 
+    if query is None or not isinstance(query, str) or not query.strip():
+        return [], True
+
+    clean_query = query.strip()
     embedding_service = get_embedding_service()
     chroma_service = get_chroma_service()
 
     # Generate query embedding
-    query_emb = embedding_service.generate_query_embedding(query)
+    query_emb = embedding_service.generate_query_embedding(clean_query)
 
     # Query ChromaDB with sufficient candidate window for deduplication
     fetch_k = max(top_k * 4, 10)

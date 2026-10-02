@@ -117,16 +117,19 @@ class ConversationMemoryAgent:
             Tuple of (resolved_query, was_resolved, active_topic)
         """
         session = self.get_session(conversation_id)
+        query_clean = (query or "").strip() if isinstance(query, str) else ""
+        if not query_clean:
+            return "", False, session.get("active_topic") if session else None
+
         if not session or not session.get("last_query"):
             # No prior turn in session
-            current_topic = self._infer_topic(query)
-            return query, False, current_topic
+            current_topic = self._infer_topic(query_clean)
+            return query_clean, False, current_topic
 
         last_query = session.get("last_query", "")
         last_response = session.get("last_response", "")
         active_topic = session.get("active_topic")
 
-        query_clean = query.strip()
         query_lower = query_clean.lower()
         query_words = set(re.findall(r'\b\w+\b', query_lower))
 
@@ -135,16 +138,27 @@ class ConversationMemoryAgent:
         rag_keywords = {"rag", "retrieval", "embeddings", "sentence", "transformer", "chunking", "pipeline"}
         library_keywords = {"book", "books", "borrow", "library", "fine", "due", "renewal", "id card", "return"}
         leave_keywords = {"leave", "vacation", "sick", "annual", "maternity", "paternity", "employee", "hr"}
+        hostel_keywords = {"hostel", "accommodation", "room", "mess", "curfew", "warden", "gate", "bed", "allotment", "occupancy", "visitor", "hostel fee"}
+        exam_keywords = {"exam", "examination", "grade", "grading", "attendance", "revaluation", "gpa", "cgpa", "malpractice", "supplementary", "makeup", "probation", "hall ticket"}
 
         is_current_library = bool(query_words & library_keywords)
         is_current_rag = bool(query_words & rag_keywords)
         is_current_leave = bool(query_words & leave_keywords)
+        is_current_hostel = bool(query_words & hostel_keywords)
+        is_current_exam = bool(query_words & exam_keywords)
 
         # Topic switch detection
         if is_current_library and active_topic != "College Library Policy":
-            # Switch context to College Library Policy cleanly without blending RAG
             session["active_topic"] = "College Library Policy"
             return query_clean, False, "College Library Policy"
+
+        if is_current_hostel and active_topic != "Hostel Accommodation Policy":
+            session["active_topic"] = "Hostel Accommodation Policy"
+            return query_clean, False, "Hostel Accommodation Policy"
+
+        if is_current_exam and active_topic != "Academic Examination Policy":
+            session["active_topic"] = "Academic Examination Policy"
+            return query_clean, False, "Academic Examination Policy"
 
         if is_current_rag and active_topic != "RAG Architecture":
             session["active_topic"] = "RAG Architecture"
@@ -158,7 +172,6 @@ class ConversationMemoryAgent:
         # Case A: Anaphoric referents ('its main steps', 'how does it work', 'what are its components')
         if any(p in query_words for p in ["its", "it", "they", "them", "these", "those"]):
             if active_topic == "RAG Architecture" or "rag" in last_query.lower():
-                # Replace 'its' / 'it' with 'RAG' or 'RAG pipeline'
                 if "main steps" in query_lower or "steps" in query_lower:
                     return "What are the main steps in the RAG pipeline?", True, "RAG Architecture"
                 resolved = re.sub(r'\bits\b', "RAG's", query_clean, flags=re.IGNORECASE)
@@ -171,17 +184,28 @@ class ConversationMemoryAgent:
                 resolved = re.sub(r'\bit\b', "the borrowed book", query_clean, flags=re.IGNORECASE)
                 return resolved, True, "College Library Policy"
 
+            if active_topic == "Hostel Accommodation Policy" or any(w in last_query.lower() for w in ["hostel", "room", "mess"]):
+                resolved = re.sub(r'\bit\b', "the hostel room", query_clean, flags=re.IGNORECASE)
+                return resolved, True, "Hostel Accommodation Policy"
+
+            if active_topic == "Academic Examination Policy" or any(w in last_query.lower() for w in ["exam", "grade", "attendance"]):
+                resolved = re.sub(r'\bit\b', "the examination", query_clean, flags=re.IGNORECASE)
+                return resolved, True, "Academic Examination Policy"
+
         # Case B: Elliptical context continuation ('What about the renewal period?', 'What about that?')
         if query_lower.startswith("what about") or query_lower.startswith("how about") or query_lower.startswith("and "):
             if query_lower in ["what about that?", "what about that", "what about it?", "what about it"]:
                 if active_topic == "College Library Policy":
                     return "What are the key rules in the College Library Policy?", True, "College Library Policy"
+                elif active_topic == "Hostel Accommodation Policy":
+                    return "What are the key guidelines in the Hostel Accommodation Policy?", True, "Hostel Accommodation Policy"
+                elif active_topic == "Academic Examination Policy":
+                    return "What are the key regulations in the Academic Examination Policy?", True, "Academic Examination Policy"
                 elif active_topic == "RAG Architecture":
                     return "What are the key concepts and steps in RAG architecture?", True, "RAG Architecture"
                 elif active_topic == "Employee Leave Policy":
                     return "What are the main guidelines in the Employee Leave Policy?", True, "Employee Leave Policy"
                 else:
-                    # Context is insufficient to resolve "that" -> let Clarification Agent ask
                     return query_clean, False, active_topic
 
             if active_topic == "College Library Policy" or any(w in last_query.lower() for w in ["book", "library"]):
@@ -189,8 +213,21 @@ class ConversationMemoryAgent:
                     return "What is the renewal period for borrowed library books?", True, "College Library Policy"
                 if "fine" in query_lower:
                     return "What is the late return fine for library books?", True, "College Library Policy"
-                # Append context
                 return f"{query_clean} in college library policy?", True, "College Library Policy"
+
+            if active_topic == "Hostel Accommodation Policy" or any(w in last_query.lower() for w in ["hostel", "room", "mess"]):
+                if "refund" in query_lower:
+                    return "What is the hostel fee refund policy?", True, "Hostel Accommodation Policy"
+                if "timing" in query_lower or "curfew" in query_lower:
+                    return "What are the hostel gate timings and curfew?", True, "Hostel Accommodation Policy"
+                return f"{query_clean} in hostel accommodation policy?", True, "Hostel Accommodation Policy"
+
+            if active_topic == "Academic Examination Policy" or any(w in last_query.lower() for w in ["exam", "grade", "attendance"]):
+                if "revaluation" in query_lower:
+                    return "What is the procedure for examination revaluation?", True, "Academic Examination Policy"
+                if "attendance" in query_lower:
+                    return "What is the minimum attendance requirement for examinations?", True, "Academic Examination Policy"
+                return f"{query_clean} in academic examination policy?", True, "Academic Examination Policy"
 
             if active_topic == "RAG Architecture" or "rag" in last_query.lower():
                 return f"{query_clean} in RAG architecture?", True, "RAG Architecture"
@@ -207,15 +244,24 @@ class ConversationMemoryAgent:
         text = (query + " " + (response or "")).lower()
         if referenced_docs:
             for doc in referenced_docs:
-                if "library" in doc.lower():
+                d_low = doc.lower()
+                if "library" in d_low:
                     return "College Library Policy"
-                if "rag" in doc.lower():
+                if "hostel" in d_low or "accommodation" in d_low:
+                    return "Hostel Accommodation Policy"
+                if "exam" in d_low or "academic" in d_low:
+                    return "Academic Examination Policy"
+                if "rag" in d_low:
                     return "RAG Architecture"
-                if "leave" in doc.lower():
+                if "leave" in d_low:
                     return "Employee Leave Policy"
 
         if any(w in text for w in ["library", "book", "books", "borrow", "renewal", "fine"]):
             return "College Library Policy"
+        if any(w in text for w in ["hostel", "mess", "curfew", "warden", "room allocation", "hostel fee"]):
+            return "Hostel Accommodation Policy"
+        if any(w in text for w in ["exam", "examination", "revaluation", "attendance", "cgpa", "gpa", "makeup exam"]):
+            return "Academic Examination Policy"
         if any(w in text for w in ["rag", "retrieval", "embedding", "chunking", "chroma"]):
             return "RAG Architecture"
         if any(w in text for w in ["leave", "vacation", "sick leave", "annual leave"]):

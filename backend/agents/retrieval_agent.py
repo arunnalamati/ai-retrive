@@ -22,11 +22,21 @@ class RetrievalAgent:
         if threshold is None:
             threshold = settings.RETRIEVAL_THRESHOLD
 
-        if subqueries and len(subqueries) > 1:
+        clean_query = query.strip() if (query is not None and isinstance(query, str)) else ""
+        clean_subqueries = [sq.strip() for sq in (subqueries or []) if sq is not None and isinstance(sq, str) and sq.strip()]
+
+        if not clean_query and not clean_subqueries:
+            return {
+                "top_k": top_k,
+                "results": [],
+                "no_sufficient_information": True
+            }
+
+        if clean_subqueries and len(clean_subqueries) > 1:
             all_chunks = []
             seen_ids = set()
             any_sufficient = False
-            for sq in subqueries:
+            for sq in clean_subqueries:
                 sq_chunks, sq_no_info = search_knowledge_base(
                     query=sq,
                     top_k=top_k,
@@ -39,26 +49,28 @@ class RetrievalAgent:
                     if cid not in seen_ids:
                         seen_ids.add(cid)
                         all_chunks.append(c)
-            # Also search full query
-            full_chunks, full_no_info = search_knowledge_base(
-                query=query,
-                top_k=top_k,
-                threshold=threshold
-            )
-            if not full_no_info:
-                any_sufficient = True
-            for c in full_chunks:
-                cid = c.get("chunk_id") or c.get("id") or c.get("content", "")[:30]
-                if cid not in seen_ids:
-                    seen_ids.add(cid)
-                    all_chunks.append(c)
+            # Also search full query if valid
+            if clean_query:
+                full_chunks, full_no_info = search_knowledge_base(
+                    query=clean_query,
+                    top_k=top_k,
+                    threshold=threshold
+                )
+                if not full_no_info:
+                    any_sufficient = True
+                for c in full_chunks:
+                    cid = c.get("chunk_id") or c.get("id") or c.get("content", "")[:30]
+                    if cid not in seen_ids:
+                        seen_ids.add(cid)
+                        all_chunks.append(c)
 
             all_chunks.sort(key=lambda x: x.get("relevance_score", 0.0), reverse=True)
             chunks = all_chunks[:top_k * 2]
             no_sufficient_info = not any_sufficient
         else:
+            search_q = clean_query or (clean_subqueries[0] if clean_subqueries else "")
             chunks, no_sufficient_info = search_knowledge_base(
-                query=query,
+                query=search_q,
                 top_k=top_k,
                 threshold=threshold
             )

@@ -1,5 +1,13 @@
 import os
 from pathlib import Path
+
+# Prevent thread deadlock on Windows with PyTorch / HuggingFace
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Root directory of the project
@@ -19,8 +27,16 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 700
     CHUNK_OVERLAP: int = 120
 
-    # Retrieval Threshold
+    # Retrieval and Ranking Thresholds (M4.3 Centralized Configuration)
+    TOP_K: int = 3
     RETRIEVAL_THRESHOLD: float = 0.35
+    SIMILARITY_THRESHOLD: float = 0.35
+    CONFIDENCE_THRESHOLD_HIGH: float = 0.70
+    CONFIDENCE_THRESHOLD_MEDIUM: float = 0.50
+
+    # Analytics and Conversation Memory
+    MAX_CONVERSATION_HISTORY: int = 10
+    ANALYTICS_ENABLED: bool = True
 
     # Embedding model
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
@@ -28,6 +44,9 @@ class Settings(BaseSettings):
     # File and Data Storage
     UPLOAD_DIR: str = str(BASE_DIR / "data" / "uploads")
     SQLITE_DB_PATH: str = str(BASE_DIR / "data" / "metadata.db")
+
+    # CORS Configuration
+    CORS_ORIGINS: str = "*"
 
     model_config = SettingsConfigDict(
         env_file=".env",

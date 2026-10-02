@@ -175,3 +175,27 @@ User Query Input (Text or Web Speech API Dictation)
   - Stores multi-turn history, active topic, entities, referenced documents, and pending clarification state.
   - **Strict Architectural Separation**: Conversation memory is completely decoupled from the ChromaDB vector store to prevent conversational noise from polluting the permanent knowledge base.
 
+---
+
+## 6. Query Analytics & Knowledge Gap Detection (Milestone 4)
+
+- **Persistent Database**: SQLite table `query_analytics` inside `data/metadata.db`.
+- **Pipeline Integration**: Asynchronously/safely invoked after Step 6 of the orchestrator. If analytics logging encounters any transient filesystem error, it logs the exception and allows normal query responses to proceed uninterrupted.
+- **Tracked Metrics**:
+  - `query_id`, `conversation_id`, `timestamp`, `query_text`, `query_type`, `domain`, `theme`
+  - `resolution_status` (`ANSWERED`, `LOW_CONFIDENCE`, `UNANSWERED`, `CLARIFICATION_REQUIRED`, `ERROR`)
+  - `retrieved_documents`, `retrieved_chunks`, `retrieval_scores`, `confidence`, `response_latency`, `input_mode`
+  - `knowledge_gap` (boolean flag) and `failure_reason`
+- **Knowledge Gap Engine**: Automatically triggers when no candidate chunks meet `SIMILARITY_THRESHOLD` or when retrieved context lacks substantive term overlap with the query.
+
+---
+
+## 7. Conversational Chat UI Architecture (Milestone 4)
+
+- **Legacy Top Search Box Removed**: Completely discarded the old top search form.
+- **Top Pinned Header**: Compact `Active Topic` banner with domain tagging and a `New Session` button for session resets.
+- **Scrollable Chat Container**: Flexbox container (`flex: 1`, `overflow-y: auto`) that renders continuous message bubbles, auto-scrolling to the latest entry upon arrival.
+- **Assistant Response Nodes**: Rich cards embedding grounded markdown text, confidence ratings, audio TTS controls (`Play`, `Pause`, `Resume`, `Stop`), and collapsible evidence provenance panels.
+- **Sticky Query Footer**: Fixed to the bottom of the conversation view containing a multi-line input textarea (`Enter` to submit, `Shift+Enter` for newline), Web Speech API microphone dictation button, Top-K evidence count selector, and submit button.
+
+

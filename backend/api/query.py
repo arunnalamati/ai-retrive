@@ -9,8 +9,9 @@ router = APIRouter()
 
 @router.post("/query", response_model=QueryResponse)
 async def execute_query(request: QueryRequest):
-    query_text = request.query.strip()
-    if not query_text and not request.user_clarification:
+    query_text = (request.query or "").strip() if isinstance(request.query, str) else ""
+    user_clarification = (request.user_clarification or "").strip() if request.user_clarification else None
+    if not query_text and not user_clarification:
         raise HTTPException(status_code=400, detail="Query string or user clarification cannot be empty.")
 
     orchestrator = get_orchestrator()
@@ -19,7 +20,8 @@ async def execute_query(request: QueryRequest):
             query=query_text,
             top_k=request.top_k,
             conversation_id=request.conversation_id,
-            user_clarification=request.user_clarification
+            user_clarification=user_clarification,
+            input_mode=request.input_mode or "text"
         )
         return response
     except Exception as e:

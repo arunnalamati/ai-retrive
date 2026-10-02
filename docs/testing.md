@@ -70,3 +70,40 @@ python -m pytest -v
 | **TEST 7** | *"How many books can a student borrow?"* | Response Transparency Panel | `retrieval` | `College_Library_Policy.txt` | Shows answer, confidence (HIGH), expandable supporting evidence chunk, document name, section, and relevance score. |
 | **TEST 8** | *"What is the hostel fee?"* | Anti-Hallucination + Transparency | `retrieval` | None | Low confidence, returns *"I couldn't find sufficient information in the knowledge base."*, transparency shows no sufficiently relevant chunks found. |
 
+---
+
+## 3. Milestone 4 Automated Test Suites
+
+### 9. `tests/test_milestone_4_analytics.py`:
+- **Unit Tests**:
+  - `test_analytics_logging_basic`: Verifies all 19 schema attributes correctly persist to SQLite.
+  - `test_knowledge_gap_detection`: Verifies gap identification on unindexed queries.
+  - `test_confidence_classification`: Verifies distribution bucketing into High, Medium, Low tiers.
+  - `test_theme_detection`: Verifies theme extraction for Library, Hostel, and Examination domains.
+  - `test_analytics_aggregation_summary`: Validates average confidence, latency, and counts.
+  - `test_analytics_filtering`: Validates multi-parameter query filtering (domain, status, type, confidence).
+  - `test_latency_tracking`: Validates millisecond latency precision.
+- **Integration Tests**:
+  - `test_query_to_analytics_pipeline`: Validates automatic background analytics logging during inference.
+  - `test_retrieval_to_analytics`: Validates serialization of retrieved docs, chunks, and similarity scores.
+  - `test_clarification_to_analytics`: Validates clarification logging with `clarification_required = True`.
+  - `test_memory_to_analytics`: Validates multi-turn session ID linkage in analytics.
+  - `test_voice_query_to_analytics`: Validates voice input mode logging without None errors.
+  - `test_unanswered_to_knowledge_gap_logging`: Validates UNANSWERED classification and failure reason tracking.
+
+### 10. `tests/test_milestone_4_multi_domain.py`:
+- **Domain 1 (College Library Policy)**: Factual borrowing limit (4 books) and procedural renewal.
+- **Domain 2 (Hostel Accommodation Policy)**: Factual caution deposit (Rs. 5,000), curfew (10:00 PM), and procedural fee refund.
+- **Domain 3 (Academic Examination Policy)**: Factual attendance requirement (75%) and procedural revaluation.
+- **Cross-Domain Intent Types**:
+  - Comparative query (UG vs PG borrowing privileges).
+  - Ambiguous query (`"rules"`) triggering clarification.
+  - Multi-part query (dinner mess timings and appliance fine).
+  - Unknown query (quantum teleportation / astronaut hibernation) triggering knowledge gap.
+- **Multi-Turn Context Switching**:
+  - Turn 1: *"How many books can I borrow?"* $\rightarrow$ Library context.
+  - Turn 2: *"What about renewal?"* $\rightarrow$ Library follow-up.
+  - Turn 3: *"What is the hostel fee?"* $\rightarrow$ Switches to Hostel domain.
+  - Turn 4: *"What about its refund?"* $\rightarrow$ Resolves Hostel deposit refund with zero contamination from Library context.
+
+

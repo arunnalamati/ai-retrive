@@ -1,4 +1,5 @@
 import time
+import logging
 from typing import Dict, Any, List, Optional
 from backend.agents.query_understanding_agent import QueryUnderstandingAgent
 from backend.agents.retrieval_agent import RetrievalAgent
@@ -6,10 +7,14 @@ from backend.agents.response_generation_agent import ResponseGenerationAgent
 from backend.agents.clarification_agent import ClarificationAgent
 from backend.agents.conversation_memory_agent import get_conversation_memory_agent
 from backend.rag.confidence import calculate_retrieval_confidence
+from backend.database.analytics_db import log_query_interaction
+from backend.config import settings
+
+logger = logging.getLogger(__name__)
 
 class MultiAgentOrchestrator:
     """
-    Multi-Agent Orchestrator (Milestone 3):
+    Multi-Agent Orchestrator (Milestone 3 & 4):
     Sequentially coordinates specialized agents:
     1. Conversation Memory Agent: tracks multi-turn session state, resolves coreference ('its' -> 'RAG'),
        handles context continuation ('renewal period' -> library policy), and isolates conversation
@@ -21,6 +26,7 @@ class MultiAgentOrchestrator:
     4. Retrieval Agent: performs semantic search, filters by relevance threshold, supports multi-part subqueries.
     5. Response Generation Agent: synthesizes strictly grounded answers from retrieved context.
     6. Response Transparency Panel: prepares supporting evidence chunks, source mappings, and confidence metrics.
+    7. Query Analytics & Knowledge Gap Detection (M4.1): logs real interactions, identifies gaps, persists metrics.
     """
     def __init__(self):
         self.query_agent = QueryUnderstandingAgent()
@@ -34,10 +40,13 @@ class MultiAgentOrchestrator:
         query: str,
         top_k: int = 3,
         conversation_id: Optional[str] = None,
-        user_clarification: Optional[str] = None
+        user_clarification: Optional[str] = None,
+        input_mode: str = "text"
     ) -> Dict[str, Any]:
+        top_k = top_k if (top_k is not None and top_k > 0) else getattr(settings, 'TOP_K', 3)
+        t_start = time.time()
         pipeline_trace = []
-        original_input_query = query.strip()
+        original_input_query = (query or "").strip() if isinstance(query, str) else ""
         active_query = original_input_query
         refined_query_str = None
         clarification_info = None
@@ -140,6 +149,29 @@ class MultiAgentOrchestrator:
                 "clarification_context": clarification_info
             }
 
+            # Safe analytics logging for clarification
+            try:
+                log_query_interaction(
+                    query_text=original_input_query,
+                    query_type="ambiguous",
+                    domain=session.get("active_topic") or "General",
+                    resolution_status="CLARIFICATION_REQUIRED",
+                    confidence="Low",
+                    response_latency=round((time.time() - t_start) * 1000, 2),
+                    generated_response=clarification_question,
+                    conversation_id=session_id,
+                    clarification_required=True,
+                    clarification_count=1,
+                    retrieved_documents=[],
+                    retrieved_chunks=0,
+                    retrieval_scores=[],
+                    input_mode=input_mode,
+                    knowledge_gap=False,
+                    failure_reason=ambiguity_eval.get("missing_context")
+                )
+            except Exception as log_err:
+                logger.error(f"Analytics logging failed: {log_err}", exc_info=True)
+
             return {
                 "conversation_id": session_id,
                 "query": original_input_query,
@@ -167,7 +199,9 @@ class MultiAgentOrchestrator:
                 },
                 "active_topic": session.get("active_topic"),
                 "memory_context": memory_ctx,
-                "pipeline_trace": pipeline_trace
+                "pipeline_trace": pipeline_trace,
+                "knowledge_gap": False,
+                "resolution_status": "CLARIFICATION_REQUIRED"
             }
 
         # Step 3: Query Understanding Agent
@@ -284,6 +318,43 @@ class MultiAgentOrchestrator:
             "clarification_context": clarification_info
         }
 
+        # Determine Knowledge Gap and Resolution Status (Milestone 4.1)
+        total_latency_ms = round((time.time() - t_start) * 1000, 2)
+        is_knowledge_gap = is_insufficient
+        if is_knowledge_gap:
+            resolution_status = "UNANSWERED"
+            threshold_val = getattr(settings, 'SIMILARITY_THRESHOLD', 0.35)
+            failure_reason = f"No relevant chunks above similarity threshold ({threshold_val}) found in knowledge base."
+        elif confidence_level == "Low":
+            resolution_status = "LOW_CONFIDENCE"
+            failure_reason = "Low confidence retrieval match."
+        else:
+            resolution_status = "ANSWERED"
+            failure_reason = None
+
+        # Safe analytics logging (never interrupts main pipeline)
+        try:
+            log_query_interaction(
+                query_text=original_input_query,
+                query_type=query_type,
+                domain=current_active_topic or session.get("active_topic") or "General",
+                resolution_status=resolution_status,
+                confidence=confidence_level,
+                response_latency=total_latency_ms,
+                generated_response=final_answer,
+                conversation_id=session_id,
+                clarification_required=False,
+                clarification_count=0,
+                retrieved_documents=list(set(c["document_name"] for c in retrieval_output["results"])),
+                retrieved_chunks=len(retrieval_output["results"]),
+                retrieval_scores=[c["relevance_score"] for c in retrieval_output["results"]],
+                input_mode=input_mode,
+                knowledge_gap=is_knowledge_gap,
+                failure_reason=failure_reason
+            )
+        except Exception as log_err:
+            logger.error(f"Analytics logging failed: {log_err}", exc_info=True)
+
         return {
             "conversation_id": session_id,
             "query": original_input_query,
@@ -303,7 +374,9 @@ class MultiAgentOrchestrator:
             "transparency": transparency_data,
             "active_topic": current_active_topic,
             "memory_context": memory_ctx,
-            "pipeline_trace": pipeline_trace
+            "pipeline_trace": pipeline_trace,
+            "knowledge_gap": is_knowledge_gap,
+            "resolution_status": resolution_status
         }
 
 _orchestrator_instance = None
@@ -313,3 +386,5 @@ def get_orchestrator() -> MultiAgentOrchestrator:
     if _orchestrator_instance is None:
         _orchestrator_instance = MultiAgentOrchestrator()
     return _orchestrator_instance
+
+AgentOrchestrator = MultiAgentOrchestrator

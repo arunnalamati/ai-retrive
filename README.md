@@ -4,6 +4,7 @@ An academic, full-stack multi-agent Retrieval-Augmented Generation (RAG) system 
 - **Milestone 1**: Document Ingestion (PDF, DOCX, TXT, CSV), Boundary-Aware Chunking, Dense Semantic Embeddings (`all-MiniLM-L6-v2`), and Persistent ChromaDB Vector Store.
 - **Milestone 2**: Query Understanding Agent, Semantic Vector Retrieval Agent, Grounded Response Generation Agent with Zero-Hallucination, Confidence Estimation, and Source Attribution.
 - **Milestone 3**: Clarification Agent (targeted follow-up questions & query refinement), Conversation Memory Agent (multi-turn coreference resolution & topic switching), Web Speech Voice Input & Text-to-Speech Audio Synthesis, and Response Transparency Panel with full chunk provenance.
+- **Milestone 4**: Query Analytics Subsystem (SQLite telemetry), Knowledge Gap Detection Engine, Real-time Analytics Dashboard, Multi-Domain Knowledge Ingestion & Context Switching (Library, Hostel, Examination), Centralized Optimization & Hardened Voice Pipeline, and Modern Conversational Chat Interface (legacy top search box removed).
 
 ---
 
@@ -18,8 +19,11 @@ This project implements a modular, grounded Multi-Agent RAG System that:
 2. Converts textual chunks into dense semantic vector representations using local Sentence-Transformers.
 3. Indexes chunks inside a persistent vector database (ChromaDB) with metadata.
 4. Leverages specialized agents (Memory, Query Understanding, Clarification, Retrieval, Response Generation) to maintain session context, resolve ambiguous inquiries before retrieval, perform vector search, enforce relevance thresholds, and construct grounded answers with zero hallucination.
-5. Employs Web Speech API for bi-directional speech recognition and text-to-speech synthesis.
+5. Employs Web Speech API for bi-directional speech recognition and text-to-speech synthesis with full error recovery.
 6. Provides an interactive Response Transparency Panel detailing exact supporting evidence chunks, similarity scores, and document citations.
+7. Logs all query interactions into an observable persistent SQLite Analytics store, detecting unanswerable Knowledge Gaps and tracking recurring thematic trends.
+8. Delivers a modern conversational chat interface with a top active topic header, middle scrollable conversation feed, and sticky bottom query composer.
+
 
 ---
 

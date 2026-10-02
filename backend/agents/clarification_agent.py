@@ -87,6 +87,15 @@ class ClarificationAgent:
                 "missing_context": "Which document is being referred to?",
                 "default_topic": "College Library Policy",
                 "refine_format": "What information is provided in that document?"
+            },
+            {
+                "patterns": [
+                    r"^(?:rules|policy|regulations|fees|guidelines|procedure)\??$"
+                ],
+                "question": "Which domain rules are you referring to — College Library, Hostel Accommodation, or Examination Policy?",
+                "missing_context": "Which specific policy or rules do you want information on?",
+                "default_topic": "College Library Policy",
+                "refine_format": "What are the rules and guidelines for {user_clarification}?"
             }
         ]
 
@@ -100,7 +109,15 @@ class ClarificationAgent:
         Takes active conversation context into account:
         If active context already resolves the referent, NO clarification is needed.
         """
-        cleaned_query = query.strip()
+        cleaned_query = (query or "").strip() if isinstance(query, str) else ""
+        if not cleaned_query:
+            return {
+                "clarification_required": True,
+                "original_query": "",
+                "clarification_question": "Please provide a question so I can assist you with the knowledge base.",
+                "missing_context": "Empty query",
+                "refined_query": None
+            }
         lower_query = cleaned_query.lower()
 
         # 1. If conversation memory already resolved the referents, check if confident
@@ -108,7 +125,13 @@ class ClarificationAgent:
             # Context is active, let retrieval handle with resolved context
             has_explicit_context = bool(conversation_context.get("last_query") or conversation_context.get("active_topic"))
             # If the user query is a natural follow up with active context, do NOT trigger clarification
-            if has_explicit_context and any(w in lower_query for w in ["its", "it", "renewal", "steps", "policy", "fine", "period", "more"]):
+            active_followup_terms = [
+                "its", "it", "renewal", "renew", "steps", "policy", "fine", "period", "more",
+                "refund", "deposit", "curfew", "mess", "timing", "timings", "gate",
+                "attendance", "revaluation", "grade", "fee", "fees", "backlog", "supplementary",
+                "arrear", "hall ticket", "room", "allocation", "visitor"
+            ]
+            if has_explicit_context and any(w in lower_query for w in active_followup_terms):
                 return {
                     "clarification_required": False,
                     "original_query": cleaned_query,
@@ -243,6 +266,9 @@ class ClarificationAgent:
         Example: 'How many books can I borrow and what is the late return fine?'
         -> ['How many books can I borrow', 'what is the late return fine']
         """
+        if not query or not isinstance(query, str) or not query.strip():
+            return None
+
         # Split on coordinating conjunctions with question indicators
         patterns = [
             r'\s+and\s+(?:what|how|why|when|where|who|is|are|can)\b',
@@ -267,7 +293,7 @@ class ClarificationAgent:
                     subqueries.append(prefix + splits[1].strip().rstrip('?'))
                 else:
                     subqueries.append(splits[1].strip().rstrip('?'))
-                return subqueries
+                return [s for s in subqueries if s and s.strip()]
 
         return None
 
@@ -279,15 +305,16 @@ class ClarificationAgent:
     ) -> str:
         """
         Synthesizes a clean, refined search query by combining original query and user's clarification.
-        Example:
-        Original: "How long can I keep it?"
-        Clarification: "library books" or "Yes, library books."
-        Refined: "How long can a student keep a borrowed library book?"
         """
-        orig_clean = original_query.strip().rstrip('?')
+        orig_clean = (original_query or "").strip().rstrip('?') if isinstance(original_query, str) else ""
         orig_lower = orig_clean.lower()
-        user_clean = user_clarification.strip().rstrip('.')
+        user_clean = (user_clarification or "").strip().rstrip('.') if isinstance(user_clarification, str) else ""
         user_lower = user_clean.lower()
+
+        if not orig_clean and user_clean:
+            return user_clean + "?"
+        if not user_clean and orig_clean:
+            return orig_clean + "?"
 
         # Check matched templates for tailored clean phrasing
         if "borrow" in orig_lower:

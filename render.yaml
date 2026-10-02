@@ -1,0 +1,35 @@
+# Render Infrastructure as Code Blueprint
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: ai-rag-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: CHROMA_PATH
+        value: /app/data/chroma
+      - key: COLLECTION_NAME
+        value: knowledge_chunks
+      - key: RETRIEVAL_THRESHOLD
+        value: "0.35"
+      - key: EMBEDDING_MODEL
+        value: all-MiniLM-L6-v2
+      - key: UPLOAD_DIR
+        value: /app/data/uploads
+      - key: SQLITE_DB_PATH
+        value: /app/data/metadata.db
+      - key: LLM_PROVIDER
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        sync: false
+    disk:
+      name: rag-storage
+      mountPath: /app/data
+      sizeGB: 1

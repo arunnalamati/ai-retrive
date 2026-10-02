@@ -75,3 +75,5 @@ class QueryResponse(BaseModel):
     active_topic: Optional[str] = None
     memory_context: Optional[Dict[str, Any]] = None
     pipeline_trace: Optional[List[AgentStepTrace]] = None
+    knowledge_gap: Optional[bool] = False
+    resolution_status: Optional[str] = "ANSWERED"

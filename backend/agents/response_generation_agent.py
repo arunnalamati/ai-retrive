@@ -28,16 +28,25 @@ class ResponseGenerationAgent:
             return "I couldn't find sufficient information in the knowledge base to answer this question."
 
         # Verify key topical overlap to prevent partial vector false-positives
-        # (e.g. query asking for 'maternity' when text only talks about annual/sick leave)
-        stop_words = {"what", "is", "the", "company's", "company", "policy", "how", "many", "do", "i", "are", "in", "a", "an", "does", "it", "to", "for", "of", "and"}
-        query_words = set(re.findall(r'\b[a-zA-Z]{3,}\b', query.lower())) - stop_words
+        # (e.g. query asking for 'maternity' when text only talks about annual/sick leave,
+        # or astronaut hibernation when text only talks about general college policy)
+        stop_words = {
+            "what", "is", "the", "company's", "company", "policy", "how", "many", "do", "i",
+            "are", "in", "a", "an", "does", "it", "to", "for", "of", "and", "or", "on", "can",
+            "we", "you", "tell", "about", "university", "college", "campus", "institution",
+            "institutional", "during", "guidelines", "please", "give", "me", "any", "some",
+            "rules", "process", "procedure", "protocol", "details", "information"
+        }
+        query_words = [w for w in re.findall(r'\b[a-zA-Z]{3,}\b', query.lower()) if w not in stop_words]
         
         all_chunk_text = " ".join(c.get("content", "") for c in retrieved_chunks).lower()
         if query_words:
             matched_words = [w for w in query_words if w in all_chunk_text]
-            # If NONE of the key subject terms exist in any retrieved chunk, declare insufficient information
-            if not matched_words:
+            # If NONE of the key substantive subject terms exist, or if fewer than half match on multi-term query:
+            if not matched_words or (len(query_words) >= 3 and len(matched_words) <= 1):
                 return "I couldn't find sufficient information in the knowledge base to answer this question."
+
+
 
         # If an external LLM is configured, query the provider
         if settings.LLM_API_KEY and settings.LLM_PROVIDER:
@@ -125,7 +134,12 @@ class ResponseGenerationAgent:
         keywords = set(re.findall(r'\b[a-zA-Z]{3,}\b', query.lower())) - {"what", "is", "the", "are", "how", "does", "can"}
         is_how_long = "how long" in query.lower() or "period" in query.lower() or "keep" in query.lower()
         is_how_many = "how many" in query.lower() or "limit" in query.lower() or "number" in query.lower()
-        is_fine_cost = "fine" in query.lower() or "fee" in query.lower() or "cost" in query.lower()
+        is_fine_cost = "fine" in query.lower() or "fee" in query.lower() or "cost" in query.lower() or "deposit" in query.lower()
+        is_refund = "refund" in query.lower() or "vacat" in query.lower() or "withdraw" in query.lower()
+        is_timing = any(w in query.lower() for w in ["timing", "curfew", "time", "hours", "gate", "mess", "lock"])
+        is_attendance = any(w in query.lower() for w in ["attendance", "minimum", "detained", "condonation", "medical"])
+        is_grading = any(w in query.lower() for w in ["grade", "grading", "passing", "scale", "cgpa", "sgpa", "point", "weightage", "cia", "ese"])
+        is_reval = any(w in query.lower() for w in ["revaluation", "re-evaluation", "scrutiny", "photocopy", "senior examiner"])
 
         scored_sentences = []
         for s in all_sentences:
@@ -133,10 +147,20 @@ class ResponseGenerationAgent:
             score = sum(1 for kw in keywords if kw in s_lower)
             if is_how_long and any(w in s_lower for w in ["days", "period", "issued", "keep", "hours", "duration"]):
                 score += 4
-            if is_how_many and any(w in s_lower for w in ["books", "borrow", "up to", "receive", "days"]):
-                score += 2
-            if is_fine_cost and any(w in s_lower for w in ["fine", "rupees", "charged", "fee"]):
+            if is_how_many and any(w in s_lower for w in ["books", "borrow", "up to", "receive", "days", "configuration", "occupancy"]):
                 score += 3
+            if is_fine_cost and any(w in s_lower for w in ["fine", "rupees", "charged", "fee", "caution", "deposit", "cost"]):
+                score += 4
+            if is_refund and any(w in s_lower for w in ["refund", "refunded", "vacates", "calendar days", "caution deposit"]):
+                score += 4
+            if is_timing and any(w in s_lower for w in ["am", "pm", "clock", "curfew", "gate", "locked", "breakfast", "dinner", "lunch"]):
+                score += 4
+            if is_attendance and any(w in s_lower for w in ["75%", "65%", "attendance", "detained", "condonation", "medical"]):
+                score += 4
+            if is_grading and any(w in s_lower for w in ["grade", "cia", "ese", "40%", "60%", "point", "50%", "cgpa"]):
+                score += 4
+            if is_reval and any(w in s_lower for w in ["revaluation", "500 rupees", "10 working days", "5% or more", "examiner"]):
+                score += 4
             scored_sentences.append((score, s))
             
         scored_sentences.sort(key=lambda x: x[0], reverse=True)

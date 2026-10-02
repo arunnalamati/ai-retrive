@@ -9,6 +9,8 @@ import QueryAnalysis from './components/QueryAnalysis';
 import AgentPipeline from './components/AgentPipeline';
 import RetrievalResults from './components/RetrievalResults';
 import ResponsePanel from './components/ResponsePanel';
+import ChatInterface from './components/ChatInterface';
+import AnalyticsDashboard from './components/AnalyticsDashboard';
 import { healthCheck, getDocuments, getSystemStats, queryKnowledgeBase } from './services/api';
 import './App.css';
 
@@ -64,10 +66,11 @@ export default function App() {
     return () => clearInterval(interval);
   }, [refreshData]);
 
-  // Execute Query with Multi-Agent Step Animations (supports M3 conversation & clarification)
-  const handleQuery = async (customQuery, userClarification = null) => {
-    const q = customQuery !== undefined ? customQuery : query;
-    if ((!q.trim() && !userClarification) || isLoading) return;
+  // Execute Query with Multi-Agent Step Animations (supports M3 conversation & clarification and M4 input_mode)
+  const handleQuery = async (customQuery, userClarification = null, inputMode = 'text') => {
+    const rawQ = customQuery !== undefined && customQuery !== null ? customQuery : query;
+    const q = typeof rawQ === 'string' ? rawQ.trim() : '';
+    if ((!q && !userClarification) || isLoading) return;
 
     setIsLoading(true);
     setErrorMessage('');
@@ -83,14 +86,14 @@ export default function App() {
     });
 
     try {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 150));
       setPipelineState((prev) => ({
         ...prev,
         understanding: 'completed',
         retrieval: 'processing'
       }));
 
-      const res = await queryKnowledgeBase(q, topK, conversationId, userClarification);
+      const res = await queryKnowledgeBase(q, topK, conversationId, userClarification, inputMode || 'text');
 
       if (res.conversation_id) {
         setConversationId(res.conversation_id);
@@ -123,11 +126,9 @@ export default function App() {
 
       setQueryResponse(res);
       setConversationHistory((prev) => {
-        // If user clarification was submitted, replace or append to history cleanly
         return [...prev, res];
       });
 
-      // Clear search box if successful
       if (!userClarification) {
         setQuery('');
       }
@@ -185,101 +186,25 @@ export default function App() {
             </div>
           )}
 
-          {/* Ask AI Tab */}
+          {/* Ask AI Tab (Milestone 4 Modern Chat UI) */}
           {activeTab === 'ask-ai' && (
-            <div>
-              <QueryPanel
-                query={query}
-                setQuery={setQuery}
-                topK={topK}
-                setTopK={setTopK}
-                onSearch={(customQuery) => handleQuery(customQuery)}
-                isLoading={isLoading}
-                activeTopic={activeTopic}
-                onResetSession={conversationHistory.length > 0 ? handleResetSession : null}
-              />
-
-              {errorMessage && (
-                <div style={{
-                  padding: '14px 18px',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                  color: 'var(--danger)',
-                  marginBottom: '20px',
-                  fontSize: '14px'
-                }}>
-                  ❌ {errorMessage}
-                </div>
-              )}
-
-              {/* Agent Pipeline Visualizer */}
-              {(isLoading || queryResponse) && (
-                <AgentPipeline
-                  pipelineState={pipelineState}
-                  pipelineTrace={queryResponse?.pipeline_trace}
-                  isAmbiguous={queryResponse?.route === 'clarification_required'}
-                />
-              )}
-
-              {/* Query Understanding Card */}
-              {queryResponse && (
-                <QueryAnalysis analysis={{
-                  query: queryResponse.query,
-                  query_type: queryResponse.query_type,
-                  classification_confidence: queryResponse.classification_confidence,
-                  route: queryResponse.route,
-                  reasoning: queryResponse.pipeline_trace?.[1]?.details || queryResponse.pipeline_trace?.[0]?.details
-                }} />
-              )}
-
-              {/* AI Conversation & Response Flow */}
-              <ResponsePanel
-                queryResponse={queryResponse}
-                conversationHistory={conversationHistory}
-                onSubmitClarification={handleClarificationSubmit}
-                isLoading={isLoading}
-              />
-
-              {/* Retrieved Chunks Results */}
-              {queryResponse && queryResponse.route !== 'clarification_required' && (
-                <RetrievalResults
-                  results={queryResponse.retrieval?.results}
-                  noSufficientInfo={queryResponse.retrieval?.no_sufficient_information}
-                />
-              )}
-            </div>
+            <ChatInterface
+              conversationHistory={conversationHistory}
+              activeTopic={activeTopic}
+              onSendMessage={(msg, mode) => handleQuery(msg, null, mode || 'text')}
+              onSubmitClarification={handleClarificationSubmit}
+              isLoading={isLoading}
+              topK={topK}
+              setTopK={setTopK}
+              onResetSession={handleResetSession}
+              pipelineState={pipelineState}
+              errorMessage={errorMessage}
+            />
           )}
 
-          {/* Analytics Tab */}
+          {/* Retrieval Analytics Dashboard Tab (Milestone 4.1) */}
           {activeTab === 'analytics' && (
-            <div className="glass-card">
-              <h2 style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-heading)', marginBottom: '12px' }}>
-                📈 Retrieval Analytics & Quality Metrics
-              </h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginTop: '16px' }}>
-                <div className="analysis-item">
-                  <div className="analysis-label">Vector Embedding Model</div>
-                  <div className="analysis-val">all-MiniLM-L6-v2</div>
-                </div>
-                <div className="analysis-item">
-                  <div className="analysis-label">Embedding Dimensions</div>
-                  <div className="analysis-val">384 Dimensions</div>
-                </div>
-                <div className="analysis-item">
-                  <div className="analysis-label">Distance Metric</div>
-                  <div className="analysis-val">Cosine Distance</div>
-                </div>
-                <div className="analysis-item">
-                  <div className="analysis-label">Default Relevance Threshold</div>
-                  <div className="analysis-val">0.35 (Configurable)</div>
-                </div>
-              </div>
-              <p style={{ marginTop: '20px', fontSize: '13.5px', color: 'var(--text-secondary)' }}>
-                Similarity scores represent normalized cosine values calculated as <code>1 - (distance / 2)</code>. 
-                Queries with chunks failing to exceed the threshold are flagged with low confidence and prevent hallucinations.
-              </p>
-            </div>
+            <AnalyticsDashboard />
           )}
 
           {/* Architecture Tab */}

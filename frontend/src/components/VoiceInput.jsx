@@ -1,32 +1,56 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 /**
- * Voice Input Component (Milestone 3.3)
- * Uses Web Speech API SpeechRecognition / webkitSpeechRecognition to capture voice inquiries.
- * States: Idle, Listening, Processing, Error
- * Transcribes spoken inquiry directly into the query input for user review.
+ * Voice Input Component (Milestone 4.3 Voice Optimization)
+ * Uses Web Speech API (SpeechRecognition / webkitSpeechRecognition).
+ *
+ * Implements strict states:
+ * - IDLE
+ * - LISTENING
+ * - TRANSCRIBING
+ * - PROCESSING
+ * - ERROR
+ *
+ * Controls:
+ * - Start recording
+ * - Stop recording
+ * - Restart recording
+ *
+ * Behavior:
+ * - Shows "🎤 Listening..." while recording
+ * - Live previews speech into the input field
+ * - Validates transcript before handing off
+ * - NEVER passes empty or null text to submission
+ * - Specific user-friendly feedback on empty speech, recognition failures, or browser incompatibility
  */
-export default function VoiceInput({ onTranscript, onFinalResult, isInputDisabled = false }) {
-  const [status, setStatus] = useState('idle'); // 'idle' | 'listening' | 'processing' | 'error'
+export default function VoiceInput({
+  onTranscript,
+  onSpeechStart,
+  onSpeechEnd,
+  isInputDisabled = false
+}) {
+  // States: 'idle' | 'listening' | 'transcribing' | 'processing' | 'error'
+  const [status, setStatus] = useState('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [isSupported, setIsSupported] = useState(true);
 
-  // Store SpeechRecognition instance and session flags in refs
   const recognitionRef = useRef(null);
   const isListeningRef = useRef(false);
   const isStartingRef = useRef(false);
-  const hasDispatchedFinalRef = useRef(false);
+  const currentTranscriptRef = useRef('');
 
-  // Keep latest callback references without triggering recognition re-creation
+  // Keep latest callback references
   const onTranscriptRef = useRef(onTranscript);
-  const onFinalResultRef = useRef(onFinalResult);
+  const onSpeechStartRef = useRef(onSpeechStart);
+  const onSpeechEndRef = useRef(onSpeechEnd);
 
   useEffect(() => {
     onTranscriptRef.current = onTranscript;
-    onFinalResultRef.current = onFinalResult;
+    onSpeechStartRef.current = onSpeechStart;
+    onSpeechEndRef.current = onSpeechEnd;
   });
 
-  // Initialize SpeechRecognition only ONCE on mount
+  // Check browser support and initialize recognition instance
   useEffect(() => {
     const SpeechRecognition =
       typeof window !== 'undefined'
@@ -38,94 +62,103 @@ export default function VoiceInput({ onTranscript, onFinalResult, isInputDisable
       return;
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
 
-    recognition.onstart = () => {
-      isStartingRef.current = false;
-      isListeningRef.current = true;
-      setStatus('listening');
-      setErrorMessage('');
-    };
-
-    recognition.onresult = (event) => {
-      let interimTranscript = '';
-      let finalTranscript = '';
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const item = event.results[i];
-        if (item.isFinal) {
-          finalTranscript += item[0].transcript;
-        } else {
-          interimTranscript += item[0].transcript;
-        }
-      }
-
-      // Interim speech preview directly in the query input
-      if (interimTranscript && onTranscriptRef.current) {
-        onTranscriptRef.current(interimTranscript);
-      }
-
-      // Final recognized text sent only after recognition produces a final result
-      if (finalTranscript && !hasDispatchedFinalRef.current) {
-        hasDispatchedFinalRef.current = true;
-        const trimmed = finalTranscript.trim();
-        setStatus('processing');
-
-        if (onTranscriptRef.current) {
-          onTranscriptRef.current(trimmed);
-        }
-        if (onFinalResultRef.current) {
-          onFinalResultRef.current(trimmed);
-        }
-      }
-    };
-
-    recognition.onerror = (event) => {
-      const error = event.error;
-      console.warn('Speech recognition error event:', error);
-      isStartingRef.current = false;
-
-      // 9 & 10: Treat "aborted" as a recoverable interruption, NOT a fatal error
-      if (error === 'aborted') {
-        isListeningRef.current = false;
-        setStatus('idle');
+      recognition.onstart = () => {
+        isStartingRef.current = false;
+        isListeningRef.current = true;
+        currentTranscriptRef.current = '';
+        setStatus('listening');
         setErrorMessage('');
-        return;
-      }
+        onSpeechStartRef.current?.();
+      };
 
-      // No speech detected
-      if (error === 'no-speech') {
+      recognition.onresult = (event) => {
+        setStatus('transcribing');
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const item = event.results[i];
+          if (item && item[0]) {
+            const text = item[0].transcript || '';
+            if (item.isFinal) {
+              finalTranscript += text;
+            } else {
+              interimTranscript += text;
+            }
+          }
+        }
+
+        const activeText = (finalTranscript || interimTranscript).trim();
+        if (activeText) {
+          currentTranscriptRef.current = activeText;
+          if (onTranscriptRef.current) {
+            onTranscriptRef.current(activeText);
+          }
+        }
+      };
+
+      recognition.onerror = (event) => {
+        const error = event.error;
+        console.warn('Speech recognition error event:', error);
+        isStartingRef.current = false;
         isListeningRef.current = false;
+
+        if (error === 'aborted') {
+          setStatus('idle');
+          setErrorMessage('');
+          return;
+        }
+
+        if (error === 'no-speech') {
+          setStatus('idle');
+          setErrorMessage('Could not detect speech. Please try again.');
+          return;
+        }
+
+        setStatus('error');
+        if (error === 'not-allowed' || error === 'permission-denied') {
+          setErrorMessage('Microphone permission is required.');
+        } else if (error === 'network') {
+          setErrorMessage('Network error during speech recognition.');
+        } else {
+          setErrorMessage('Speech recognition failed. Please try again.');
+        }
+      };
+
+      recognition.onend = () => {
+        isListeningRef.current = false;
+        isStartingRef.current = false;
         setStatus('idle');
-        setErrorMessage('No speech detected. Please try speaking again.');
-        return;
-      }
 
-      // Explicit permission or network errors
-      isListeningRef.current = false;
-      setStatus('error');
-      if (error === 'not-allowed' || error === 'permission-denied') {
-        setErrorMessage('Microphone permission is required.');
-      } else if (error === 'network') {
-        setErrorMessage('Network error during speech recognition.');
-      } else {
-        setErrorMessage(`Voice error: ${error}`);
-      }
-    };
+        const finalRecorded = currentTranscriptRef.current.trim();
+        if (!finalRecorded) {
+          if (!errorMessage) {
+            setErrorMessage('Could not detect speech. Please try again.');
+          }
+        } else {
+          // Valid transcript captured
+          setErrorMessage('');
+          if (onTranscriptRef.current) {
+            onTranscriptRef.current(finalRecorded);
+          }
+          if (onSpeechEndRef.current) {
+            onSpeechEndRef.current(finalRecorded);
+          }
+        }
+      };
 
-    recognition.onend = () => {
-      isListeningRef.current = false;
-      isStartingRef.current = false;
-      // Revert status to idle if it was listening or processing
-      setStatus((prev) => (prev === 'listening' || prev === 'processing' ? 'idle' : prev));
-    };
+      recognitionRef.current = recognition;
+    } catch (err) {
+      console.warn('Speech recognition init failed:', err);
+      setIsSupported(false);
+    }
 
-    recognitionRef.current = recognition;
-
-    // Component unmount cleanup: remove handlers before aborting to avoid state updates on unmounted component
     return () => {
       if (recognitionRef.current) {
         try {
@@ -140,110 +173,265 @@ export default function VoiceInput({ onTranscript, onFinalResult, isInputDisable
     };
   }, []);
 
-  const toggleListening = () => {
+  const startListening = () => {
     if (!isSupported || !recognitionRef.current) {
-      setErrorMessage('Speech recognition is not supported in this browser.');
+      setErrorMessage('Voice input is not supported in this browser.');
       setStatus('error');
       return;
     }
-
-    // 1. Guard & Toggle: if already actively listening, user explicitly clicked Stop
-    if (isListeningRef.current) {
-      isListeningRef.current = false;
-      isStartingRef.current = false;
-      try {
-        recognitionRef.current.stop();
-      } catch (_) {}
-      setStatus('idle');
-      return;
-    }
-
-    // 11 & 12. Guard against multiple start calls while already starting
-    if (isStartingRef.current) {
-      return;
-    }
+    if (isListeningRef.current || isStartingRef.current) return;
 
     setErrorMessage('');
-    hasDispatchedFinalRef.current = false;
+    currentTranscriptRef.current = '';
     isStartingRef.current = true;
+    setStatus('processing');
 
-    // 13. Safely start new recognition session
     try {
       recognitionRef.current.start();
     } catch (err) {
       console.warn('Error starting speech recognition:', err);
       isStartingRef.current = false;
       isListeningRef.current = false;
-      // Safely reset existing session without crash or infinite restart loop
       try {
         recognitionRef.current.abort();
       } catch (_) {}
-      setStatus('idle');
+      setStatus('error');
+      setErrorMessage('Speech recognition failed. Please try again.');
     }
   };
 
-  const getButtonContent = () => {
+  const stopListening = () => {
+    if (isListeningRef.current && recognitionRef.current) {
+      isListeningRef.current = false;
+      isStartingRef.current = false;
+      setStatus('processing');
+      try {
+        recognitionRef.current.stop();
+      } catch (_) {
+        setStatus('idle');
+      }
+    }
+  };
+
+  const restartListening = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch (_) {}
+    }
+    isListeningRef.current = false;
+    isStartingRef.current = false;
+    setTimeout(() => {
+      startListening();
+    }, 150);
+  };
+
+  const toggleListening = () => {
+    if (status === 'listening' || status === 'transcribing') {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
+
+  const renderStatusButton = () => {
     switch (status) {
       case 'listening':
+      case 'transcribing':
         return (
-          <>
-            <span style={{ display: 'inline-block', width: '9px', height: '9px', borderRadius: '50%', background: '#ef4444', animation: 'pulse 1s infinite' }} />
-            <span style={{ color: '#ef4444', fontWeight: 600 }}>Listening...</span>
-          </>
+          <button
+            type="button"
+            id="voice-mic-listening-btn"
+            className="voice-btn listening"
+            onClick={stopListening}
+            disabled={isInputDisabled}
+            title="Click to stop recording"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 14px',
+              borderRadius: '20px',
+              fontSize: '13px',
+              cursor: 'pointer',
+              background: 'rgba(239, 68, 68, 0.2)',
+              border: '1px solid #ef4444',
+              color: '#f87171',
+              fontWeight: 600,
+              transition: 'all 0.2s ease',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <span
+              style={{
+                display: 'inline-block',
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: '#ef4444',
+                animation: 'pulse 1.2s infinite'
+              }}
+            />
+            <span>🎤 Listening...</span>
+          </button>
         );
+
       case 'processing':
         return (
-          <>
-            <span>⏳</span>
+          <button
+            type="button"
+            className="voice-btn processing"
+            disabled
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 14px',
+              borderRadius: '20px',
+              fontSize: '13px',
+              background: 'rgba(100, 116, 139, 0.2)',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-muted)',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <span className="spinner" style={{ width: '12px', height: '12px' }} />
             <span>Transcribing...</span>
-          </>
+          </button>
         );
+
       case 'error':
         return (
-          <>
+          <button
+            type="button"
+            id="voice-mic-error-btn"
+            className="voice-btn error"
+            onClick={restartListening}
+            disabled={isInputDisabled}
+            title="Click to restart voice input"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 14px',
+              borderRadius: '20px',
+              fontSize: '13px',
+              cursor: 'pointer',
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              color: '#fca5a5',
+              whiteSpace: 'nowrap'
+            }}
+          >
             <span>⚠️</span>
-            <span>Voice Error</span>
-          </>
+            <span>Retry Voice</span>
+          </button>
         );
+
       case 'idle':
       default:
         return (
-          <>
+          <button
+            type="button"
+            id="voice-mic-btn"
+            className="voice-btn idle"
+            onClick={startListening}
+            disabled={isInputDisabled}
+            title={
+              !isSupported
+                ? 'Voice input is not supported in this browser'
+                : 'Speak query via microphone'
+            }
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 14px',
+              borderRadius: '20px',
+              fontSize: '13px',
+              cursor: isInputDisabled ? 'not-allowed' : 'pointer',
+              background: 'rgba(30, 41, 59, 0.7)',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-secondary)',
+              transition: 'all 0.2s ease',
+              whiteSpace: 'nowrap'
+            }}
+          >
             <span>🎤</span>
             <span>Voice</span>
-          </>
+          </button>
         );
     }
   };
 
   return (
-    <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-      <button
-        type="button"
-        id="voice-input-btn"
-        className={`btn-secondary ${status === 'listening' ? 'voice-listening' : ''}`}
-        onClick={toggleListening}
-        disabled={isInputDisabled}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '6px',
-          padding: '8px 14px',
-          borderRadius: 'var(--radius-md)',
-          fontSize: '13px',
-          cursor: isInputDisabled ? 'not-allowed' : 'pointer',
-          background: status === 'listening' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(30, 41, 59, 0.6)',
-          borderColor: status === 'listening' ? '#ef4444' : 'var(--border-subtle)',
-          transition: 'all 0.2s ease'
-        }}
-        title={!isSupported ? 'Speech recognition unsupported' : status === 'listening' ? 'Click to stop listening' : 'Click to speak your inquiry'}
-      >
-        {getButtonContent()}
-      </button>
+    <div style={{ display: 'inline-flex', alignItems: 'center', position: 'relative' }}>
+      {renderStatusButton()}
 
+      {/* When listening, show an explicit Stop & Restart control pill */}
+      {(status === 'listening' || status === 'transcribing') && (
+        <button
+          type="button"
+          onClick={restartListening}
+          title="Restart speech recognition"
+          style={{
+            marginLeft: '6px',
+            background: 'rgba(30, 41, 59, 0.8)',
+            border: '1px solid var(--border-subtle)',
+            color: 'var(--text-muted)',
+            borderRadius: '50%',
+            width: '28px',
+            height: '28px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '12px',
+            cursor: 'pointer'
+          }}
+        >
+          🔄
+        </button>
+      )}
+
+      {/* Floating alert for voice state messages */}
       {errorMessage && (
-        <div style={{ fontSize: '11px', color: '#f87171', maxWidth: '280px', lineHeight: 1.3 }}>
-          {errorMessage}
+        <div
+          className="voice-error-toast"
+          style={{
+            position: 'absolute',
+            bottom: 'calc(100% + 8px)',
+            left: 0,
+            fontSize: '11.5px',
+            color: '#fecaca',
+            background: 'rgba(15, 23, 42, 0.95)',
+            border: '1px solid rgba(239, 68, 68, 0.5)',
+            padding: '6px 12px',
+            borderRadius: '8px',
+            whiteSpace: 'nowrap',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
+            zIndex: 40,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          <span>ℹ️</span>
+          <span>{errorMessage}</span>
+          <button
+            type="button"
+            onClick={() => setErrorMessage('')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#94a3b8',
+              cursor: 'pointer',
+              padding: 0,
+              fontSize: '12px',
+              lineHeight: 1
+            }}
+          >
+            ✕
+          </button>
         </div>
       )}
     </div>

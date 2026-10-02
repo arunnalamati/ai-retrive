@@ -1,7 +1,7 @@
 from typing import Optional, Literal
 from pydantic import BaseModel, Field
 
-QueryType = Literal["factual", "procedural", "comparative", "ambiguous"]
+QueryType = Literal["factual", "procedural", "comparative", "ambiguous", "multi_part", "follow_up"]
 QueryRoute = Literal["retrieval", "clarification_required"]
 
 class QueryRequest(BaseModel):
@@ -9,6 +9,7 @@ class QueryRequest(BaseModel):
     top_k: int = Field(default=3, ge=1, le=10, description="Number of top chunks to retrieve")
     conversation_id: Optional[str] = Field(default=None, description="Optional conversation session ID")
     user_clarification: Optional[str] = Field(default=None, description="User's clarification response if answering a follow-up")
+    input_mode: Optional[str] = Field(default="text", description="Input mode: 'text' or 'voice'")
 
 class ClarificationState(BaseModel):
     conversation_id: Optional[str] = None

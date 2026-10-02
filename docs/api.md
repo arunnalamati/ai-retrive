@@ -183,3 +183,58 @@ Clears short-term conversational context for the given session.
   "status": "online"
 }
 ```
+
+---
+
+## 7. Query Analytics Endpoints (Milestone 4.1)
+
+### `GET /analytics/summary`
+Returns high-level analytical KPI summaries.
+- **Query Parameters**: `domain` (optional)
+- **Response**:
+```json
+{
+  "total_queries": 45,
+  "answered": 41,
+  "unanswered": 2,
+  "low_confidence": 2,
+  "clarification_count": 5,
+  "knowledge_gap_count": 2,
+  "avg_response_latency_ms": 115.4,
+  "avg_confidence": 0.82
+}
+```
+
+### `GET /analytics/queries`
+Returns paginated query records with multi-dimensional filtering.
+- **Query Parameters**:
+  - `domain`: Filter by knowledge domain
+  - `query_type`: Filter by intent (`factual`, `procedural`, etc.)
+  - `status`: Filter by resolution status (`ANSWERED`, `UNANSWERED`, etc.)
+  - `confidence`: Filter by confidence (`High`, `Medium`, `Low`)
+  - `limit`, `offset`: Pagination parameters
+
+### `GET /analytics/unanswered`
+Lists queries that could not be grounded by the knowledge base.
+- **Query Parameters**: `domain` (optional), `limit` (default: 50)
+
+### `GET /analytics/knowledge-gaps`
+Lists isolated knowledge gaps with diagnostic failure reasons.
+- **Query Parameters**: `domain` (optional), `limit` (default: 50)
+
+### `GET /analytics/themes`
+Returns frequency counts of detected inquiry themes.
+- **Query Parameters**: `domain` (optional)
+
+### `GET /analytics/confidence`
+Returns query counts grouped by confidence tier (`high`, `medium`, `low`).
+- **Query Parameters**: `domain` (optional)
+
+### `GET /analytics/types`
+Returns query counts grouped by intent classification.
+- **Query Parameters**: `domain` (optional)
+
+### `GET /analytics/trends`
+Returns daily query volume and resolution trends over time.
+- **Query Parameters**: `domain` (optional), `days` (default: 7)
+
